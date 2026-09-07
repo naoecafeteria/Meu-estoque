@@ -97,9 +97,10 @@
   .bloco p{margin:0;font-size:15px}
 
   .qr{margin:26px 0 0;padding:16px;border:1px dashed var(--tinta-borda);border-radius:12px}
-  .qr p{margin:0 0 8px;font-size:13px;color:var(--leite-fraco)}
+  .qr[hidden]{display:none}
+
   .qr code{display:block;word-break:break-all;font-size:12px;font-family:ui-monospace,monospace;
-    color:var(--cobre);margin-bottom:12px}
+    color:var(--cobre);margin-bottom:14px}
   .btn{background:var(--cobre);color:#17110A;border:0;padding:10px 18px;border-radius:9px;
     font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
   .btn.secundario{background:transparent;color:var(--leite);border:1px solid var(--tinta-borda);font-weight:400}
@@ -194,6 +195,7 @@ let carregando = true;
 let falha = "";
 let extracoes = [];
 let anotando = false;
+let veioDeDentro = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -332,14 +334,33 @@ function ficha(c){
       <p class="erro" id="erroBaixa" hidden></p>
     </section>` : "";
 
-  const campoE = (n,r,t="input") => t==="textarea"
-    ? `<label>${r}<textarea name="${n}"></textarea></label>`
-    : `<label>${r}<input name="${n}"></label>`;
+  const anteriores = campo => {
+    const contagem = new Map();
+    extracoes.forEach(e => {
+      const v = (e.dados || {})[campo];
+      if (v) contagem.set(v, (contagem.get(v) || 0) + 1);
+    });
+    return [...contagem.entries()].sort((a,b) => b[1] - a[1]).map(x => x[0]).slice(0, 12);
+  };
+
+  const ultima = (extracoes[0] || {}).dados || {};
+  const repetir = ["metodo","moedor","click","proporcao","temperatura","receita"];
+
+  const campoE = (n,r,t="input") => {
+    const padrao = repetir.includes(n) ? (ultima[n] || "") : "";
+    const opcoes = anteriores(n);
+    const lista = opcoes.length ? `<datalist id="sug-${n}">${
+      opcoes.map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>` : "";
+    return t === "textarea"
+      ? `<label>${r}<textarea name="${n}">${esc(padrao)}</textarea></label>`
+      : `<label>${r}<input name="${n}" value="${esc(padrao)}" autocomplete="off"${
+          opcoes.length ? ` list="sug-${n}"` : ""}>${lista}</label>`;
+  };
 
   const painel = anotando ? `
     <section class="anotacao">
       <h3>Anote esta extração</h3>
-      <p class="estoque-rot">Tudo opcional. Preencha só o que interessa.</p>
+      <p class="estoque-rot">Já vem com o da última extração. Ajuste o que mudou.</p>
       <form class="novo" id="formExt">
         <div class="duas">
           ${campoE("metodo","Método de extração")}
@@ -406,12 +427,13 @@ function ficha(c){
         ${dado("Peso por dose",c.pesoDose)}
       </dl>
       ${historico}
+      ${veioDeDentro ? `
       <div class="qr">
-        <p>Link desta ficha, para colar no gerador de QR do app da impressora:</p>
+        <p>Link para colar no gerador de QR do app da impressora:</p>
         <code id="link">${esc(linkDo(c.id))}</code>
         <button class="btn secundario" id="copiar">Copiar link</button>
-      </div>
-      <p class="apagar-linha"><button class="apagar" id="apagar">Apagar este café</button></p>
+      </div>` : ""}
+      ${veioDeDentro ? `<p class="apagar-linha"><button class="apagar" id="apagar">Apagar este café</button></p>` : ""}
     </article>`;
 }
 
@@ -484,7 +506,7 @@ function ligar(){
   };
 
   document.querySelectorAll(".item").forEach(b =>
-    b.onclick = () => { window.scrollTo(0,0); location.hash = "c=" + encodeURIComponent(b.dataset.id); });
+    b.onclick = () => { veioDeDentro = true; window.scrollTo(0,0); location.hash = "c=" + encodeURIComponent(b.dataset.id); });
 
   const voltar = document.getElementById("voltar");
   if (voltar) voltar.onclick = () => { anotando = false; window.scrollTo(0,0); location.hash = ""; };
@@ -647,6 +669,7 @@ function ligar(){
       cafes.unshift(Object.assign({}, o, { consumidas: 0 }));
       fotoEmBase64 = "";
       aba = "estoque";
+      veioDeDentro = true;
       window.scrollTo(0,0);
       location.hash = "c=" + encodeURIComponent(o.id);
       render();
