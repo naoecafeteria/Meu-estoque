@@ -112,6 +112,11 @@
   form.novo textarea{min-height:74px;resize:vertical}
   form.novo input[type=file]{padding:9px;color:var(--leite-fraco);font-size:14px}
   .anotacao{margin:20px 0 0;padding:18px;border:1px solid var(--cobre);border-radius:14px;background:var(--tinta-alta)}
+  .sugestoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{background:transparent;border:1px solid var(--tinta-borda);border-radius:999px;
+    padding:6px 13px;font-family:inherit;font-size:13px;color:var(--leite-fraco);cursor:pointer}
+  .chip:hover{border-color:var(--cobre);color:var(--leite)}
+  .chip-ativo{background:var(--cobre);border-color:var(--cobre);color:#17110A}
   .anotacao h3{font-family:Fraunces,serif;font-size:17px;margin:0;font-weight:600}
   .anotacao .btn{width:auto}
   .anotacao .btn.secundario{margin-left:10px}
@@ -349,10 +354,10 @@ function ficha(c){
   const campoE = (n,r,t="input") => {
     if (t === "textarea") return `<label>${r}<textarea name="${n}"></textarea></label>`;
     const opcoes = comSugestao.includes(n) ? anteriores(n) : [];
-    const lista = opcoes.length ? `<datalist id="sug-${n}">${
-      opcoes.map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>` : "";
-    return `<label>${r}<input name="${n}" autocomplete="off"${
-      opcoes.length ? ` list="sug-${n}"` : ""}>${lista}</label>`;
+    const chips = opcoes.length ? `<span class="sugestoes">${
+      opcoes.map(o => `<button type="button" class="chip" data-campo="${n}" data-valor="${esc(o)}">${esc(o)}</button>`).join("")
+    }</span>` : "";
+    return `<label>${r}<input name="${n}" autocomplete="off"></label>${chips}`;
   };
 
   const painel = anotando ? `
@@ -557,6 +562,13 @@ function ligar(){
       alert("Não consegui apagar. Tente de novo.");
     }
   };
+
+  document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
+    const campo = document.querySelector(`#formExt [name="${b.dataset.campo}"]`);
+    campo.value = b.dataset.valor;
+    document.querySelectorAll(`.chip[data-campo="${b.dataset.campo}"]`)
+      .forEach(x => x.classList.toggle("chip-ativo", x === b));
+  });
 
   const pularExt = document.getElementById("pularExt");
   if (pularExt) pularExt.onclick = () => { anotando = false; render(); };
