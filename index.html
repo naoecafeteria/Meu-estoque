@@ -344,24 +344,21 @@ function ficha(c){
     return [...contagem.entries()].sort((a,b) => b[1] - a[1]).map(x => x[0]).slice(0, 12);
   };
 
-  const ultima = (extracoes[0] || {}).dados || {};
-  const repetir = ["metodo","moedor","click","proporcao","temperatura","receita"];
+  const comSugestao = ["metodo","moedor"];
 
   const campoE = (n,r,t="input") => {
-    const padrao = repetir.includes(n) ? (ultima[n] || "") : "";
-    const opcoes = anteriores(n);
+    if (t === "textarea") return `<label>${r}<textarea name="${n}"></textarea></label>`;
+    const opcoes = comSugestao.includes(n) ? anteriores(n) : [];
     const lista = opcoes.length ? `<datalist id="sug-${n}">${
       opcoes.map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>` : "";
-    return t === "textarea"
-      ? `<label>${r}<textarea name="${n}">${esc(padrao)}</textarea></label>`
-      : `<label>${r}<input name="${n}" value="${esc(padrao)}" autocomplete="off"${
-          opcoes.length ? ` list="sug-${n}"` : ""}>${lista}</label>`;
+    return `<label>${r}<input name="${n}" autocomplete="off"${
+      opcoes.length ? ` list="sug-${n}"` : ""}>${lista}</label>`;
   };
 
   const painel = anotando ? `
     <section class="anotacao">
       <h3>Anote esta extração</h3>
-      <p class="estoque-rot">Já vem com o da última extração. Ajuste o que mudou.</p>
+      <p class="estoque-rot">Tudo opcional. Preencha só o que interessa.</p>
       <form class="novo" id="formExt">
         <div class="duas">
           ${campoE("metodo","Método de extração")}
