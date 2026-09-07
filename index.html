@@ -150,6 +150,7 @@
   .estoque{margin:20px 0 0;padding:18px;border:1px solid var(--tinta-borda);border-radius:14px;background:var(--tinta-alta)}
   .estoque-num{margin:0;font-family:Fraunces,serif;font-size:15px;color:var(--leite-fraco)}
   .estoque-num strong{font-size:34px;font-weight:600;color:var(--leite);margin-right:4px}
+  .estoque-gramas{display:block;margin-top:2px;font-family:Inter,sans-serif;font-size:14px;color:var(--cobre)}
   .estoque-rot{margin:16px 0 8px;font-size:14px;color:var(--leite-fraco)}
   .contagem{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .contagem input{width:76px;text-align:center;padding:10px;border:1px solid var(--tinta-borda);
@@ -281,6 +282,17 @@ function dataCurta(iso){
 function achaCafe(id){ return cafes.find(c => c.id === id); }
 function total(c){ return Number(c.doses || 0); }
 function restam(c){ return Math.max(0, total(c) - Number(c.consumidas || 0)); }
+function gramasPorDose(c){
+  const m = String(c.pesoDose || "").replace(",", ".").match(/[\d.]+/);
+  return m ? parseFloat(m[0]) : 0;
+}
+function gramasRestantes(c){ return restam(c) * gramasPorDose(c); }
+function formataGramas(g){
+  if (!g) return "";
+  return (g >= 1000 ? (g/1000).toFixed(g % 1000 ? 2 : 0) + " kg"
+                    : Math.round(g) + " g");
+}
+
 function emEstoque(c){ return total(c) === 0 ? true : restam(c) > 0; }
 
 const linkDo = id => location.origin + location.pathname + "#c=" + id;
@@ -297,6 +309,7 @@ function cardapio(){
   const arquivo = filtrados(false);
   const lista = aba === "estoque" ? estoque : arquivo;
   const dosesTotais = estoque.reduce((s,c) => s + restam(c), 0);
+  const gramasTotais = estoque.reduce((s,c) => s + gramasRestantes(c), 0);
 
   const itens = lista.map(c => `
     <button class="item" data-id="${esc(c.id)}">
@@ -307,7 +320,8 @@ function cardapio(){
         <span class="linha2">${[c.regiao,c.processo,c.variedade].filter(Boolean).map(esc).join(" · ")}</span>
         ${c.notas ? `<span class="notas">${esc(c.notas)}</span>` : ""}
         ${total(c) ? `<span class="barra"><span class="barra-cheia" style="width:${(restam(c)/total(c))*100}%"></span></span>
-        <span class="linha2">${restam(c)} de ${total(c)} doses</span>` : ""}
+        <span class="linha2">${restam(c)} de ${total(c)} doses${
+          gramasRestantes(c) ? " · " + formataGramas(gramasRestantes(c)) : ""}</span>` : ""}
       </span>
     </button>`).join("");
 
@@ -319,7 +333,8 @@ function cardapio(){
     </nav>
     <input class="busca" id="busca" placeholder="Buscar por nome, região, processo…" value="${esc(termo)}">
     ${aba==="estoque"
-      ? `<h2 class="secao-titulo">Meu estoque<span class="contador">${dosesTotais} doses</span></h2>`
+      ? `<h2 class="secao-titulo">Meu estoque<span class="contador">${dosesTotais} doses${
+          gramasTotais ? " · " + formataGramas(gramasTotais) : ""}</span></h2>`
       : `<h2 class="secao-titulo">Histórico</h2>`}
     ${itens || `<p class="vazio">${aba==="estoque"
       ? "Estoque vazio. Cadastre um café na aba Cadastrar."
@@ -332,7 +347,8 @@ function ficha(c){
   const t = total(c), r = restam(c);
   const controle = t ? `
     <section class="estoque">
-      <p class="estoque-num"><strong>${r}</strong> de ${t} doses</p>
+      <p class="estoque-num"><strong>${r}</strong> de ${t} doses${
+        gramasRestantes(c) ? ` <span class="estoque-gramas">${formataGramas(gramasRestantes(c))} restantes</span>` : ""}</p>
       <span class="barra"><span class="barra-cheia" style="width:${(r/t)*100}%"></span></span>
       ${r > 0 ? `
         <p class="estoque-rot">Quantas doses foram tomadas?</p>
