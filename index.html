@@ -196,6 +196,7 @@ let falha = "";
 let extracoes = [];
 let anotando = false;
 let veioDeDentro = false;
+let cliqueInterno = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -506,7 +507,7 @@ function ligar(){
   };
 
   document.querySelectorAll(".item").forEach(b =>
-    b.onclick = () => { veioDeDentro = true; window.scrollTo(0,0); location.hash = "c=" + encodeURIComponent(b.dataset.id); });
+    b.onclick = () => { cliqueInterno = true; window.scrollTo(0,0); location.hash = "c=" + encodeURIComponent(b.dataset.id); });
 
   const voltar = document.getElementById("voltar");
   if (voltar) voltar.onclick = () => { anotando = false; window.scrollTo(0,0); location.hash = ""; };
@@ -669,7 +670,7 @@ function ligar(){
       cafes.unshift(Object.assign({}, o, { consumidas: 0 }));
       fotoEmBase64 = "";
       aba = "estoque";
-      veioDeDentro = true;
+      cliqueInterno = true;
       window.scrollTo(0,0);
       location.hash = "c=" + encodeURIComponent(o.id);
       render();
@@ -687,7 +688,11 @@ window.addEventListener("keydown", e => {
   }
 });
 
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", () => {
+  veioDeDentro = cliqueInterno;
+  cliqueInterno = false;
+  render();
+});
 carregar();
 </script>
 </body>
