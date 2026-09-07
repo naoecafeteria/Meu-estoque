@@ -74,7 +74,14 @@
   .ficha .origem{margin:6px 0 0;font-size:15px;color:var(--leite-fraco)}
   .selo{display:inline-block;margin:14px 0 0;padding:4px 11px;border-radius:999px;font-size:12px;
     font-family:ui-monospace,monospace;background:var(--tinta-alta);border:1px solid var(--tinta-borda);color:var(--leite-fraco)}
-  .foto{width:100%;max-height:400px;object-fit:cover;margin:20px 0 0;border-radius:14px;background:var(--tinta-alta)}
+  .foto{display:block;width:100%;max-height:60vh;object-fit:contain;margin:20px 0 0;border-radius:14px;
+    background:var(--tinta-alta);cursor:zoom-in}
+  .lupa{position:fixed;inset:0;z-index:50;background:rgba(6,10,16,.96);display:flex;
+    align-items:center;justify-content:center;padding:20px}
+  .lupa img{max-width:100%;max-height:88vh;object-fit:contain;border-radius:8px}
+  .lupa-fechar{position:absolute;top:16px;right:16px;background:var(--tinta-alta);color:var(--leite);
+    border:1px solid var(--tinta-borda);border-radius:999px;padding:10px 18px;font-family:inherit;
+    font-size:15px;cursor:pointer}
 
   .sensorial{margin:22px 0 0;font-family:Fraunces,serif;font-style:italic;font-size:22px;line-height:1.4;
     color:var(--leite);border-left:2px solid var(--cobre);padding-left:16px}
@@ -159,6 +166,11 @@
   <div id="app"></div>
 
   <footer>Meus cafés</footer>
+</div>
+
+<div class="lupa" id="lupa" hidden>
+  <button class="lupa-fechar" id="fecharLupa">Fechar</button>
+  <img id="lupaImg" alt="">
 </div>
 
 <script>
@@ -568,6 +580,21 @@ function ligar(){
     }
   });
 
+  const lupa = document.getElementById("lupa");
+  const foto = document.querySelector(".foto");
+  const abrirLupa = src => {
+    document.getElementById("lupaImg").src = src;
+    lupa.hidden = false;
+    document.body.style.overflow = "hidden";
+  };
+  const fecharLupa = () => {
+    lupa.hidden = true;
+    document.body.style.overflow = "";
+  };
+  if (foto) foto.onclick = () => abrirLupa(foto.src);
+  document.getElementById("fecharLupa").onclick = fecharLupa;
+  lupa.onclick = e => { if (e.target !== document.getElementById("lupaImg")) fecharLupa(); };
+
   const copiar = document.getElementById("copiar");
   if (copiar) copiar.onclick = async () => {
     try { await navigator.clipboard.writeText(document.getElementById("link").textContent);
@@ -628,6 +655,13 @@ function ligar(){
     }
   };
 }
+
+window.addEventListener("keydown", e => {
+  if (e.key === "Escape"){
+    const l = document.getElementById("lupa");
+    if (!l.hidden){ l.hidden = true; document.body.style.overflow = ""; }
+  }
+});
 
 window.addEventListener("hashchange", render);
 carregar();
