@@ -112,11 +112,18 @@
   form.novo textarea{min-height:74px;resize:vertical}
   form.novo input[type=file]{padding:9px;color:var(--leite-fraco);font-size:14px}
   .anotacao{margin:20px 0 0;padding:18px;border:1px solid var(--cobre);border-radius:14px;background:var(--tinta-alta)}
-  .sugestoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-  .chip{background:transparent;border:1px solid var(--tinta-borda);border-radius:999px;
-    padding:6px 13px;font-family:inherit;font-size:13px;color:var(--leite-fraco);cursor:pointer}
-  .chip:hover{border-color:var(--cobre);color:var(--leite)}
-  .chip-ativo{background:var(--cobre);border-color:var(--cobre);color:#17110A}
+  .campo-sug{position:relative}
+  .campo-sug input{padding-right:38px}
+  .seta{position:absolute;right:8px;bottom:6px;width:30px;height:34px;background:none;border:0;
+    color:var(--leite-fraco);font-size:14px;cursor:pointer}
+  .lista-sug{position:absolute;left:0;right:0;top:100%;z-index:5;margin:4px 0 0;padding:6px;
+    list-style:none;background:var(--tinta);border:1px solid var(--tinta-borda);border-radius:10px;
+    max-height:190px;overflow-y:auto}
+  .lista-sug[hidden]{display:none}
+  .lista-sug li{margin:0}
+  .lista-sug .opcao{display:block;width:100%;text-align:left;background:none;border:0;
+    padding:10px 12px;border-radius:7px;font-family:inherit;font-size:15px;color:var(--leite);cursor:pointer}
+  .lista-sug .opcao:hover{background:var(--tinta-alta);color:var(--cobre)}
   .anotacao h3{font-family:Fraunces,serif;font-size:17px;margin:0;font-weight:600}
   .anotacao .btn{width:auto}
   .anotacao .btn.secundario{margin-left:10px}
@@ -354,10 +361,14 @@ function ficha(c){
   const campoE = (n,r,t="input") => {
     if (t === "textarea") return `<label>${r}<textarea name="${n}"></textarea></label>`;
     const opcoes = comSugestao.includes(n) ? anteriores(n) : [];
-    const chips = opcoes.length ? `<span class="sugestoes">${
-      opcoes.map(o => `<button type="button" class="chip" data-campo="${n}" data-valor="${esc(o)}">${esc(o)}</button>`).join("")
-    }</span>` : "";
-    return `<label>${r}<input name="${n}" autocomplete="off"></label>${chips}`;
+    if (!opcoes.length) return `<label>${r}<input name="${n}" autocomplete="off"></label>`;
+    return `<div class="campo-sug">
+      <label>${r}<input name="${n}" autocomplete="off" data-sug="${n}"></label>
+      <button type="button" class="seta" data-sug="${n}" aria-label="Ver anteriores">▾</button>
+      <ul class="lista-sug" id="lista-${n}" hidden>${
+        opcoes.map(o => `<li><button type="button" class="opcao" data-campo="${n}" data-valor="${esc(o)}">${esc(o)}</button></li>`).join("")
+      }</ul>
+    </div>`;
   };
 
   const painel = anotando ? `
@@ -563,12 +574,29 @@ function ligar(){
     }
   };
 
-  document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
-    const campo = document.querySelector(`#formExt [name="${b.dataset.campo}"]`);
-    campo.value = b.dataset.valor;
-    document.querySelectorAll(`.chip[data-campo="${b.dataset.campo}"]`)
-      .forEach(x => x.classList.toggle("chip-ativo", x === b));
+  const fechaListas = exceto => document.querySelectorAll(".lista-sug").forEach(l => {
+    if (l !== exceto) l.hidden = true;
   });
+
+  document.querySelectorAll("[data-sug]").forEach(el => {
+    const abrir = e => {
+      e.stopPropagation();
+      const lista = document.getElementById("lista-" + el.dataset.sug);
+      const fechada = lista.hidden;
+      fechaListas(lista);
+      lista.hidden = !fechada;
+    };
+    if (el.classList.contains("seta")) el.onclick = abrir;
+    else el.onfocus = abrir;
+  });
+
+  document.querySelectorAll(".opcao").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    document.querySelector(`#formExt [name="${b.dataset.campo}"]`).value = b.dataset.valor;
+    document.getElementById("lista-" + b.dataset.campo).hidden = true;
+  });
+
+  document.addEventListener("click", () => fechaListas(null));
 
   const pularExt = document.getElementById("pularExt");
   if (pularExt) pularExt.onclick = () => { anotando = false; render(); };
