@@ -102,6 +102,9 @@
     background:var(--tinta-alta);font-family:inherit;font-size:15px;color:var(--leite)}
   form.novo textarea{min-height:74px;resize:vertical}
   form.novo input[type=file]{padding:9px;color:var(--leite-fraco);font-size:14px}
+  .apagar-linha{margin:30px 0 0;text-align:center}
+  .apagar{background:none;border:0;padding:8px;cursor:pointer;font-family:inherit;
+    font-size:14px;color:#E0705F;text-decoration:underline}
   .erro{margin:16px 0 0;font-size:14px;color:#E0705F}
   .previa{width:100%;max-height:220px;object-fit:cover;border-radius:12px;margin-top:12px}
   .duas{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
@@ -147,84 +150,73 @@
 </div>
 
 <script>
-/* ============================================================
-   SEUS CAFÉS
-   Cadastre pela aba "Cadastrar", copie o bloco gerado e cole
-   aqui dentro da lista, separado por vírgula.
-   "id" é o que vai no QR code da etiqueta.
-   "doses" é quantos tubos você porcionou.
-   ============================================================ */
-const CAFES = [
-  {
-    id: "C001",
-    nome: "Exemplo — apague quando cadastrar o seu",
-    produtor: "Sítio Boa Vista",
-    regiao: "Cerrado Mineiro, MG",
-    variedade: "Catuaí Amarelo",
-    processo: "Natural",
-    altitude: "1.150 m",
-    torra: "Média-clara",
-    torrefacao: "Nome da torrefação",
-    pontuacao: "86",
-    notas: "Caramelo, castanha-de-caju e um fundo de laranja",
-    dataTorra: "2026-08-20",
-    dataPorcao: "2026-08-28",
-    pesoTotal: "250 g",
-    doses: 8,
-    pesoDose: "30 g",
-    comentario: "Doçura fácil, funciona bem para servir visita.",
-    foto: "fotos/c001.jpg"
-  }
-];
+const SUPABASE_URL = "https://ryngoxepkckposfijxni.supabase.co";
+const SUPABASE_KEY = "sb_publishable_yaBGS8WD-LF1V1sVTeIDgg_nPhoIn0X";
+const API = SUPABASE_URL + "/rest/v1/cafes";
+const CABECALHOS = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json"
+};
 
-/* ============================================================
-   Controle de estoque e navegação.
-   O consumo fica salvo neste navegador.
-   ============================================================ */
-const CHAVE = "cafes.consumo.v1";
-const CHAVE_CAFES = "cafes.cadastrados.v1";
 const app = document.getElementById("app");
 let aba = "estoque";
-let fotoEmBase64 = "";
 let termo = "";
+let fotoEmBase64 = "";
+let cafes = [];
+let carregando = true;
+let falha = "";
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-function lerConsumo(){
-  try { return JSON.parse(localStorage.getItem(CHAVE)) || {}; }
-  catch { return {}; }
+async function carregar(){
+  carregando = true; falha = "";
+  try {
+    const r = await fetch(API + "?select=*&order=criado_em.desc", { headers: CABECALHOS });
+    if (!r.ok) throw new Error(await r.text());
+    cafes = (await r.json()).map(l => Object.assign({}, l.dados, {
+      id: l.id, consumidas: Number(l.consumidas || 0)
+    }));
+  } catch (e) {
+    falha = "Não consegui carregar seus cafés. Verifique a conexão e recarregue a página.";
+  }
+  carregando = false;
+  render();
 }
-function salvarConsumo(o){
-  try { localStorage.setItem(CHAVE, JSON.stringify(o)); } catch {}
+
+async function salvarConsumo(id, valor){
+  const r = await fetch(API + "?id=eq." + encodeURIComponent(id), {
+    method: "PATCH", headers: CABECALHOS, body: JSON.stringify({ consumidas: valor })
+  });
+  if (!r.ok) throw new Error(await r.text());
 }
-function consumidas(id){ return Number(lerConsumo()[id] || 0); }
+
+async function salvarCafe(dados){
+  const r = await fetch(API, {
+    method: "POST", headers: CABECALHOS,
+    body: JSON.stringify({ id: dados.id, dados: dados, consumidas: 0 })
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+async function apagarCafe(id){
+  const r = await fetch(API + "?id=eq." + encodeURIComponent(id), {
+    method: "DELETE", headers: CABECALHOS
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+function achaCafe(id){ return cafes.find(c => c.id === id); }
 function total(c){ return Number(c.doses || 0); }
-function restam(c){ return Math.max(0, total(c) - consumidas(c.id)); }
+function restam(c){ return Math.max(0, total(c) - Number(c.consumidas || 0)); }
 function emEstoque(c){ return total(c) === 0 ? true : restam(c) > 0; }
 
-function registrar(id, n){
-  const o = lerConsumo();
-  const c = achaCafe(id);
-  const novo = Math.min(total(c), Math.max(0, Number(o[id] || 0) + n));
-  o[id] = novo;
-  salvarConsumo(o);
-}
-
 const linkDo = id => location.origin + location.pathname + "#c=" + id;
-function cadastrados(){
-  try { return JSON.parse(localStorage.getItem(CHAVE_CAFES)) || []; }
-  catch { return []; }
-}
-function todos(){
-  const extras = cadastrados().filter(e => !CAFES.some(c => c.id === e.id));
-  return CAFES.concat(extras);
-}
-function achaCafe(id){ return todos().find(c => c.id === id); }
 
 function filtrados(estoque){
   const t = termo.trim().toLowerCase();
-  return todos().filter(c => emEstoque(c) === estoque).filter(c => !t ||
+  return cafes.filter(c => emEstoque(c) === estoque).filter(c => !t ||
     [c.nome,c.produtor,c.regiao,c.variedade,c.processo,c.notas,c.torrefacao,c.id]
       .join(" ").toLowerCase().includes(t));
 }
@@ -280,7 +272,8 @@ function ficha(c){
         </div>
         <button class="btn" id="confirmar">Confirmar baixa</button>`
         : `<p class="estoque-rot">Este café acabou.</p>`}
-      ${consumidas(c.id) > 0 ? `<button class="btn secundario" id="desfazer">Devolver 1 dose</button>` : ""}
+      ${Number(c.consumidas) > 0 ? `<button class="btn secundario" id="desfazer">Devolver 1 dose</button>` : ""}
+      <p class="erro" id="erroBaixa" hidden></p>
     </section>` : "";
 
   return `
@@ -311,6 +304,7 @@ function ficha(c){
         <code id="link">${esc(linkDo(c.id))}</code>
         <button class="btn secundario" id="copiar">Copiar link</button>
       </div>
+      <p class="apagar-linha"><button class="apagar" id="apagar">Apagar este café</button></p>
     </article>`;
 }
 
@@ -325,7 +319,6 @@ function formulario(){
       <button data-aba="cadastrar" aria-current="true">Cadastrar</button>
     </nav>
     <h2 class="secao-titulo">Cadastrar um café</h2>
-    <p class="secao-nota">O café entra no estoque deste aparelho.</p>
     <form class="novo" id="form">
       <div class="duas">
         ${campo("id","Código da etiqueta (ex.: C002)")}
@@ -356,11 +349,14 @@ function formulario(){
 }
 
 function render(){
+  if (carregando){ app.innerHTML = `<p class="vazio">Carregando seus cafés…</p>`; return; }
+  if (falha){ app.innerHTML = `<p class="vazio">${esc(falha)}</p>`; return; }
+
   const h = location.hash.match(/^#c=(.+)$/);
   if (h){
     const c = achaCafe(decodeURIComponent(h[1]));
     app.innerHTML = c ? ficha(c)
-      : `<p class="vazio">Não encontrei o café ${esc(decodeURIComponent(h[1]))}. Talvez a etiqueta seja mais nova que o dashboard.</p>
+      : `<p class="vazio">Não encontrei o café ${esc(decodeURIComponent(h[1]))}.</p>
          <p style="text-align:center"><button class="btn secundario" id="voltar">Ver meu estoque</button></p>`;
   } else {
     app.innerHTML = aba === "cadastrar" ? formulario() : cardapio();
@@ -394,18 +390,45 @@ function ligar(){
   if (menos) menos.onclick = () => passo(-1);
   if (mais) mais.onclick = () => passo(1);
 
+  async function mover(n, botao){
+    const id = decodeURIComponent(location.hash.match(/^#c=(.+)$/)[1]);
+    const c = achaCafe(id);
+    const alvo = Math.min(total(c), Math.max(0, Number(c.consumidas || 0) + n));
+    const rotulo = botao.textContent;
+    botao.disabled = true; botao.textContent = "Salvando…";
+    try {
+      await salvarConsumo(id, alvo);
+      c.consumidas = alvo;
+      render();
+    } catch {
+      botao.disabled = false; botao.textContent = rotulo;
+      const e = document.getElementById("erroBaixa");
+      e.textContent = "Não consegui salvar. Tente de novo.";
+      e.hidden = false;
+    }
+  }
+
   const confirmar = document.getElementById("confirmar");
-  if (confirmar) confirmar.onclick = () => {
-    const id = location.hash.match(/^#c=(.+)$/)[1];
-    registrar(decodeURIComponent(id), Number(qtd.value || 1));
-    render();
-  };
+  if (confirmar) confirmar.onclick = () => mover(Number(qtd.value || 1), confirmar);
 
   const desfazer = document.getElementById("desfazer");
-  if (desfazer) desfazer.onclick = () => {
-    const id = location.hash.match(/^#c=(.+)$/)[1];
-    registrar(decodeURIComponent(id), -1);
-    render();
+  if (desfazer) desfazer.onclick = () => mover(-1, desfazer);
+
+  const apagar = document.getElementById("apagar");
+  if (apagar) apagar.onclick = async () => {
+    const id = decodeURIComponent(location.hash.match(/^#c=(.+)$/)[1]);
+    const c = achaCafe(id);
+    if (!confirm("Apagar " + c.nome + " de vez? Isso não tem como desfazer.")) return;
+    apagar.disabled = true; apagar.textContent = "Apagando…";
+    try {
+      await apagarCafe(id);
+      cafes = cafes.filter(x => x.id !== id);
+      aba = "estoque";
+      location.hash = "";
+    } catch {
+      apagar.disabled = false; apagar.textContent = "Apagar este café";
+      alert("Não consegui apagar. Tente de novo.");
+    }
   };
 
   const copiar = document.getElementById("copiar");
@@ -440,7 +463,7 @@ function ligar(){
   };
 
   const gerar = document.getElementById("gerar");
-  if (gerar) gerar.onclick = () => {
+  if (gerar) gerar.onclick = async () => {
     const f = document.getElementById("form");
     const o = {};
     new FormData(f).forEach((v,k) => { if (String(v).trim()) o[k] = String(v).trim(); });
@@ -448,31 +471,29 @@ function ligar(){
     if (fotoEmBase64) o.foto = fotoEmBase64;
 
     const erro = document.getElementById("erro");
-    if (!o.id || !o.nome){
-      erro.textContent = "Preencha o código da etiqueta e o nome do café.";
-      erro.hidden = false;
-      return;
-    }
-    if (achaCafe(o.id)){
-      erro.textContent = "Já existe um café com o código " + o.id + ".";
-      erro.hidden = false;
-      return;
-    }
+    const avisa = t => { erro.textContent = t; erro.hidden = false; };
+    if (!o.id || !o.nome) return avisa("Preencha o código da etiqueta e o nome do café.");
+    if (achaCafe(o.id)) return avisa("Já existe um café com o código " + o.id + ".");
     erro.hidden = true;
 
-    const lista = cadastrados();
-    lista.push(o);
-    try { localStorage.setItem(CHAVE_CAFES, JSON.stringify(lista)); } catch {}
-
-    fotoEmBase64 = "";
-    aba = "estoque";
-    location.hash = "c=" + encodeURIComponent(o.id);
-    render();
+    gerar.disabled = true; gerar.textContent = "Salvando…";
+    try {
+      await salvarCafe(o);
+      cafes.unshift(Object.assign({}, o, { consumidas: 0 }));
+      fotoEmBase64 = "";
+      aba = "estoque";
+      window.scrollTo(0,0);
+      location.hash = "c=" + encodeURIComponent(o.id);
+      render();
+    } catch {
+      gerar.disabled = false; gerar.textContent = "Cadastrar café";
+      avisa("Não consegui salvar. Verifique a conexão e tente de novo.");
+    }
   };
 }
 
 window.addEventListener("hashchange", render);
-render();
+carregar();
 </script>
 </body>
 </html>
