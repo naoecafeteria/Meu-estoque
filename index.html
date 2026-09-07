@@ -102,6 +102,18 @@
     background:var(--tinta-alta);font-family:inherit;font-size:15px;color:var(--leite)}
   form.novo textarea{min-height:74px;resize:vertical}
   form.novo input[type=file]{padding:9px;color:var(--leite-fraco);font-size:14px}
+  .anotacao{margin:20px 0 0;padding:18px;border:1px solid var(--cobre);border-radius:14px;background:var(--tinta-alta)}
+  .anotacao h3{font-family:Fraunces,serif;font-size:17px;margin:0;font-weight:600}
+  .anotacao .btn{width:auto}
+  .anotacao .btn.secundario{margin-left:10px}
+  .bloco h3 .contador{float:right;font-size:13px}
+  .extracao{padding:14px 0;border-bottom:1px solid var(--tinta-borda)}
+  .extracao:last-of-type{border-bottom:0;padding-bottom:0}
+  .ext-data{margin:0;font-size:12px;font-family:ui-monospace,monospace;color:var(--leite-fraco)}
+  .ext-topo{margin:4px 0 0;font-size:15px;font-weight:500}
+  .ext-det{margin:3px 0 0;font-size:14px;color:var(--leite-fraco)}
+  .ext-notas{margin:6px 0 0;font-size:15px;font-family:Fraunces,serif;font-style:italic}
+  .ext-apagar{font-size:12px;padding:6px 0 0}
   .apagar-linha{margin:30px 0 0;text-align:center}
   .apagar{background:none;border:0;padding:8px;cursor:pointer;font-family:inherit;
     font-size:14px;color:#E0705F;text-decoration:underline}
@@ -153,6 +165,7 @@
 const SUPABASE_URL = "https://ryngoxepkckposfijxni.supabase.co";
 const SUPABASE_KEY = "sb_publishable_yaBGS8WD-LF1V1sVTeIDgg_nPhoIn0X";
 const API = SUPABASE_URL + "/rest/v1/cafes";
+const API_EXT = SUPABASE_URL + "/rest/v1/extracoes";
 const CABECALHOS = {
   "apikey": SUPABASE_KEY,
   "Authorization": "Bearer " + SUPABASE_KEY,
@@ -166,6 +179,8 @@ let fotoEmBase64 = "";
 let cafes = [];
 let carregando = true;
 let falha = "";
+let extracoes = [];
+let anotando = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -178,6 +193,8 @@ async function carregar(){
     cafes = (await r.json()).map(l => Object.assign({}, l.dados, {
       id: l.id, consumidas: Number(l.consumidas || 0)
     }));
+    const re = await fetch(API_EXT + "?select=*&order=criado_em.desc", { headers: CABECALHOS });
+    if (re.ok) extracoes = await re.json();
   } catch (e) {
     falha = "Não consegui carregar seus cafés. Verifique a conexão e recarregue a página.";
   }
@@ -205,6 +222,32 @@ async function apagarCafe(id){
     method: "DELETE", headers: CABECALHOS
   });
   if (!r.ok) throw new Error(await r.text());
+}
+
+async function salvarExtracao(cafeId, dados){
+  const r = await fetch(API_EXT, {
+    method: "POST", headers: Object.assign({}, CABECALHOS, {"Prefer":"return=representation"}),
+    body: JSON.stringify({ cafe_id: cafeId, dados: dados })
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return (await r.json())[0];
+}
+
+async function apagarExtracao(id){
+  const r = await fetch(API_EXT + "?id=eq." + id, { method: "DELETE", headers: CABECALHOS });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+function extracoesDo(cafeId){
+  return extracoes.filter(e => e.cafe_id === cafeId);
+}
+
+function dataCurta(iso){
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit", year:"2-digit" })
+      + " às " + d.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+  } catch { return ""; }
 }
 
 function achaCafe(id){ return cafes.find(c => c.id === id); }
@@ -276,6 +319,56 @@ function ficha(c){
       <p class="erro" id="erroBaixa" hidden></p>
     </section>` : "";
 
+  const campoE = (n,r,t="input") => t==="textarea"
+    ? `<label>${r}<textarea name="${n}"></textarea></label>`
+    : `<label>${r}<input name="${n}"></label>`;
+
+  const painel = anotando ? `
+    <section class="anotacao">
+      <h3>Anote esta extração</h3>
+      <p class="estoque-rot">Tudo opcional. Preencha só o que interessa.</p>
+      <form class="novo" id="formExt">
+        <div class="duas">
+          ${campoE("metodo","Método de extração")}
+          ${campoE("moedor","Moedor")}
+          ${campoE("click","Click do moedor")}
+          ${campoE("proporcao","Proporção")}
+          ${campoE("temperatura","Temperatura da água")}
+          ${campoE("tempo","Tempo final")}
+        </div>
+        ${campoE("receita","Receita, incluindo os despejos","textarea")}
+        ${campoE("notas","Notas desta extração","textarea")}
+        <p class="erro" id="erroExt" hidden></p>
+        <p style="margin-top:16px">
+          <button type="button" class="btn" id="salvarExt">Salvar extração</button>
+          <button type="button" class="btn secundario" id="pularExt">Agora não</button>
+        </p>
+      </form>
+    </section>` : "";
+
+  const lista = extracoesDo(c.id);
+  const historico = lista.length ? `
+    <section class="bloco">
+      <h3>Minhas extrações<span class="contador">${lista.length}</span></h3>
+      ${lista.map(e => {
+        const d = e.dados || {};
+        const topo = [d.metodo, d.proporcao, d.tempo].filter(Boolean).map(esc).join(" · ");
+        const detalhes = [
+          d.moedor ? "Moedor: " + d.moedor : "",
+          d.click ? "Click: " + d.click : "",
+          d.temperatura ? "Água: " + d.temperatura : ""
+        ].filter(Boolean).map(esc).join(" · ");
+        return `<div class="extracao">
+          <p class="ext-data">${esc(dataCurta(e.criado_em))}</p>
+          ${topo ? `<p class="ext-topo">${topo}</p>` : ""}
+          ${detalhes ? `<p class="ext-det">${detalhes}</p>` : ""}
+          ${d.receita ? `<p class="ext-det">${esc(d.receita)}</p>` : ""}
+          ${d.notas ? `<p class="ext-notas">${esc(d.notas)}</p>` : ""}
+          <button class="apagar ext-apagar" data-ext="${e.id}">Apagar</button>
+        </div>`;
+      }).join("")}
+    </section>` : "";
+
   return `
     <button class="voltar" id="voltar">← Voltar</button>
     <article class="ficha">
@@ -283,6 +376,7 @@ function ficha(c){
       <p class="origem">${[c.produtor,c.regiao].filter(Boolean).map(esc).join(", ")}</p>
       <span class="selo">${r > 0 || !t ? "Em estoque" : "Acabou"} · ${esc(c.id)}</span>
       ${controle}
+      ${painel}
       ${c.foto ? `<img class="foto" src="${esc(c.foto)}" alt="Embalagem do café ${esc(c.nome)}" onerror="this.remove()">` : ""}
       ${c.notas ? `<p class="sensorial">${esc(c.notas)}</p>` : ""}
       <dl class="dados">
@@ -298,7 +392,7 @@ function ficha(c){
         ${dado("Doses porcionadas",t || "")}
         ${dado("Peso por dose",c.pesoDose)}
       </dl>
-      ${c.comentario ? `<div class="bloco"><h3>O que eu achei</h3><p>${esc(c.comentario)}</p></div>` : ""}
+      ${historico}
       <div class="qr">
         <p>Link desta ficha, para colar no gerador de QR do app da impressora:</p>
         <code id="link">${esc(linkDo(c.id))}</code>
@@ -338,7 +432,6 @@ function formulario(){
         ${campo("pesoDose","Peso por dose")}
       </div>
       ${campo("notas","Notas sensoriais")}
-      ${campo("comentario","O que eu achei","textarea")}
       <label>Foto da embalagem
         <input type="file" id="arquivoFoto" accept="image/*">
       </label>
@@ -366,7 +459,7 @@ function render(){
 
 function ligar(){
   document.querySelectorAll("nav button").forEach(b =>
-    b.onclick = () => { aba = b.dataset.aba; termo = ""; location.hash = ""; window.scrollTo(0,0); render(); });
+    b.onclick = () => { aba = b.dataset.aba; termo = ""; anotando = false; location.hash = ""; window.scrollTo(0,0); render(); });
 
   const busca = document.getElementById("busca");
   if (busca) busca.oninput = e => {
@@ -381,7 +474,7 @@ function ligar(){
     b.onclick = () => { window.scrollTo(0,0); location.hash = "c=" + encodeURIComponent(b.dataset.id); });
 
   const voltar = document.getElementById("voltar");
-  if (voltar) voltar.onclick = () => { window.scrollTo(0,0); location.hash = ""; };
+  if (voltar) voltar.onclick = () => { anotando = false; window.scrollTo(0,0); location.hash = ""; };
 
   const qtd = document.getElementById("qtd");
   const passo = d => { qtd.value = Math.min(Number(qtd.max), Math.max(1, Number(qtd.value || 1) + d)); };
@@ -399,6 +492,7 @@ function ligar(){
     try {
       await salvarConsumo(id, alvo);
       c.consumidas = alvo;
+      anotando = n > 0;
       render();
     } catch {
       botao.disabled = false; botao.textContent = rotulo;
@@ -430,6 +524,49 @@ function ligar(){
       alert("Não consegui apagar. Tente de novo.");
     }
   };
+
+  const pularExt = document.getElementById("pularExt");
+  if (pularExt) pularExt.onclick = () => { anotando = false; render(); };
+
+  const salvarExt = document.getElementById("salvarExt");
+  if (salvarExt) salvarExt.onclick = async () => {
+    const id = decodeURIComponent(location.hash.match(/^#c=(.+)$/)[1]);
+    const o = {};
+    new FormData(document.getElementById("formExt")).forEach((v,k) => {
+      if (String(v).trim()) o[k] = String(v).trim();
+    });
+    const erroExt = document.getElementById("erroExt");
+    if (!Object.keys(o).length){
+      erroExt.textContent = "Preencha ao menos um campo, ou toque em Agora não.";
+      erroExt.hidden = false;
+      return;
+    }
+    erroExt.hidden = true;
+    salvarExt.disabled = true; salvarExt.textContent = "Salvando…";
+    try {
+      const nova = await salvarExtracao(id, o);
+      extracoes.unshift(nova);
+      anotando = false;
+      render();
+    } catch {
+      salvarExt.disabled = false; salvarExt.textContent = "Salvar extração";
+      erroExt.textContent = "Não consegui salvar. Tente de novo.";
+      erroExt.hidden = false;
+    }
+  };
+
+  document.querySelectorAll(".ext-apagar").forEach(b => b.onclick = async () => {
+    if (!confirm("Apagar esta extração?")) return;
+    const id = Number(b.dataset.ext);
+    b.disabled = true; b.textContent = "Apagando…";
+    try {
+      await apagarExtracao(id);
+      extracoes = extracoes.filter(e => Number(e.id) !== id);
+      render();
+    } catch {
+      b.disabled = false; b.textContent = "Apagar";
+    }
+  });
 
   const copiar = document.getElementById("copiar");
   if (copiar) copiar.onclick = async () => {
